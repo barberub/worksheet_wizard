@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
 class SecondScreen extends StatefulWidget {
   const SecondScreen({super.key});
 
@@ -154,12 +158,42 @@ class _SecondScreenState extends State<SecondScreen> {
               ),
             ),
           ),
+        
+          ElevatedButton(
+            onPressed: () async {
+              if (_questions.isEmpty) return;
+
+              final question = _questions.first;
+              final pdf = pw.Document();
+
+              pdf.addPage(
+                pw.Page(
+                  build: (pw.Context context) {
+                    return pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Question:', style: pw.TextStyle(fontSize: 18)),
+                        pw.SizedBox(height: 8),
+                        pw.Text(question.text, style: pw.TextStyle(fontSize: 14)),
+                      ],
+                    );
+                  },
+                ),
+              );
+
+              await Printing.layoutPdf(
+                onLayout: (PdfPageFormat format) async => pdf.save(),
+              );
+            },
+            child: Text('Print First Question'),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openAddDialog(context),
         child: const Icon(Icons.add),
       ),
+      
     );
   }
 
