@@ -42,14 +42,64 @@ class _SecondScreenState extends State<SecondScreen> {
     });
   }
 
+    void _onSelected(String value) async {
+    // Handle dropdown menu selection
+    if (value == 'print') {
+      if (_questions.isEmpty) return;
+
+      final question = _questions.first;
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.Page(
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('Question 1:', style: pw.TextStyle(fontSize: 18)),
+                pw.SizedBox(height: 8),
+                pw.Text(question.text, style: pw.TextStyle(fontSize: 14)),
+                pw.SizedBox(height: 8),
+                ...List.generate(question.answerLineCount, (_) => 
+                  pw.Container(
+                    margin: const pw.EdgeInsets.only(bottom: 12),
+                    height: 2,
+                    color: PdfColors.black,
+                  )
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    }
+
+    if (value == 'layout') {
+
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // double appBarHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
     // double remainingHeight = MediaQuery.of(context).size.height - appBarHeight - _expandedHeight;
 
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Worksheet Title'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: _onSelected,
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem(value: 'print', child: Text('Print')),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -159,34 +209,6 @@ class _SecondScreenState extends State<SecondScreen> {
             ),
           ),
         
-          ElevatedButton(
-            onPressed: () async {
-              if (_questions.isEmpty) return;
-
-              final question = _questions.first;
-              final pdf = pw.Document();
-
-              pdf.addPage(
-                pw.Page(
-                  build: (pw.Context context) {
-                    return pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('Question:', style: pw.TextStyle(fontSize: 18)),
-                        pw.SizedBox(height: 8),
-                        pw.Text(question.text, style: pw.TextStyle(fontSize: 14)),
-                      ],
-                    );
-                  },
-                ),
-              );
-
-              await Printing.layoutPdf(
-                onLayout: (PdfPageFormat format) async => pdf.save(),
-              );
-            },
-            child: Text('Print First Question'),
-          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
