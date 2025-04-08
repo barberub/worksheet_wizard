@@ -4,22 +4,43 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'storage_service.dart';
+
 class SecondScreen extends StatefulWidget {
-  const SecondScreen({super.key});
+  final Map<String, dynamic> worksheetData;
+  final int worksheetIndex;
+  final List<Map<String, dynamic>> allWorksheets;
+  final VoidCallback? onSave;
+
+  const SecondScreen({
+    super.key,
+    required this.worksheetData,
+    required this.worksheetIndex,
+    required this.allWorksheets,
+    this.onSave,
+  });
 
   @override
   State<SecondScreen> createState() => _SecondScreenState();
 }
 
+
 class _SecondScreenState extends State<SecondScreen> {
+  late Map<String, dynamic> worksheet;
   double _expandedHeight = 100;
   final double _collapsedHeight = 100;
   final double _maxExpandedHeight = 400;
   final double _bufferSpace = 100;
   final double _paperAspectRatio = 8.5 / 11;
   bool _isExpanded = false;
+  final StorageService storage = StorageService();
 
-  List<Question> _questions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    worksheet = Map<String, dynamic>.from(widget.worksheetData);
+  }
 
   void _toggleExpansion() {
     setState(() {
@@ -45,9 +66,9 @@ class _SecondScreenState extends State<SecondScreen> {
     void _onSelected(String value) async {
     // Handle dropdown menu selection
     if (value == 'print') {
-      if (_questions.isEmpty) return;
+      if (worksheet['questions'].isEmpty) return;
 
-      final question = _questions.first;
+      final question = worksheet['questions'][0];
       final pdf = pw.Document();
 
       pdf.addPage(
@@ -58,9 +79,9 @@ class _SecondScreenState extends State<SecondScreen> {
               children: [
                 pw.Text('Question 1:', style: pw.TextStyle(fontSize: 18)),
                 pw.SizedBox(height: 8),
-                pw.Text(question.text, style: pw.TextStyle(fontSize: 14)),
+                pw.Text(question['questionText'], style: pw.TextStyle(fontSize: 14)),
                 pw.SizedBox(height: 8),
-                ...List.generate(question.answerLineCount, (_) => 
+                ...List.generate(question['answerSpaces'], (_) => 
                   pw.Container(
                     margin: const pw.EdgeInsets.only(bottom: 12),
                     height: 2,
@@ -83,6 +104,13 @@ class _SecondScreenState extends State<SecondScreen> {
     }
   }
 
+  Future<void> saveWorksheet() async {
+    // Update the worksheet in the overall list
+    widget.allWorksheets[widget.worksheetIndex] = worksheet;
+    await storage.saveWorksheets(widget.allWorksheets);
+    widget.onSave?.call(); // to refresh HomeScreen if needed
+  }
+
   @override
   Widget build(BuildContext context) {
     // double appBarHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
@@ -91,7 +119,7 @@ class _SecondScreenState extends State<SecondScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Worksheet Title'),
+        title: Text(worksheet['worksheetTitle']),
         actions: [
           PopupMenuButton<String>(
             onSelected: _onSelected,
@@ -137,7 +165,7 @@ class _SecondScreenState extends State<SecondScreen> {
                   // Expandable Content
                   if (_isExpanded)
                     Expanded(
-                      child: _questions.isEmpty
+                      child: worksheet['questions'].isEmpty
                       ? Center(
                         child: Text(
                           'No Questions!',
@@ -150,14 +178,14 @@ class _SecondScreenState extends State<SecondScreen> {
                         )
                       : ListView.builder(
                         padding: EdgeInsets.zero,
-                        itemCount: _questions.length,
+                        itemCount: worksheet['questions'].length,
                         itemBuilder: (context, index) {
-                          final question = _questions[index];
+                          final question = worksheet['questions'][index];
                           return ListTile(
-                            title: Text('Question ${index + 1}: ${question.text}'),
+                            title: Text('Question ${index + 1}: ${question['questionText']}'),
                             trailing: IconButton(
                               icon: Icon(Icons.edit),
-                              onPressed: () => _openEditDialog(context, index),
+                              onPressed: () => _openEditDialog(index),
                             ),
                           );
                         },
@@ -212,189 +240,165 @@ class _SecondScreenState extends State<SecondScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _openAddDialog(context),
+        onPressed: () => _openAddDialog(),
         child: const Icon(Icons.add),
       ),
       
     );
   }
 
-  void _openEditDialog(BuildContext context, int index) {
-    final question = _questions[index];
+  void _openEditDialog(int index) {
+    final question = worksheet['questions'][index];
 
-    // Controllers initialized with existing values
-    final textController = TextEditingController(text: question.text);
-    final qaSpaceController = TextEditingController(text: question.qaSpace.toString());
-    bool hasLines = question.hasAnswerLines;
-    final answerLineCountController = TextEditingController(text: question.answerLineCount.toString());
+    final TextEditingController questionController =
+        TextEditingController(text: question['questionText']);
+    int fillerLines = question['fillerLines'];
+    bool hasAnswerLines = question['hasAnswerLines'];
+    int answerSpaces = question['answerSpaces'];
 
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Edit Question'),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: textController,
-                  minLines: 1,
-                  maxLines: null,
-                  decoration: InputDecoration(labelText: 'Question Text'),
-                ),
-                TextField(
-                  controller: qaSpaceController,
-                  decoration: InputDecoration(labelText: 'QA Space'),
-                  keyboardType: TextInputType.number,
-                ),
-                SwitchListTile(
-                  title: Text('Has Answer Lines'),
-                  value: hasLines,
-                  onChanged: (val) {
-                    hasLines = val;
-                    // Rebuild the dialog to reflect changes if needed
-                    (context as Element).markNeedsBuild();
-                  },
-                ),
-                if (hasLines)
-                  TextField(
-                    controller: answerLineCountController,
-                    decoration: InputDecoration(labelText: 'Answer Line Count'),
-                    keyboardType: TextInputType.number,
-                  ),
-              ],
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Question'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: questionController,
+              decoration: const InputDecoration(labelText: 'Question Text'),
             ),
+            TextField(
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Filler Lines'),
+              onChanged: (val) => fillerLines = int.tryParse(val) ?? fillerLines,
+            ),
+            TextField(
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Answer Spaces'),
+              onChanged: (val) => answerSpaces = int.tryParse(val) ?? answerSpaces,
+            ),
+            Row(
+              children: [
+                const Text('Include Answer Lines?'),
+                Switch(
+                  value: hasAnswerLines,
+                  onChanged: (val) => setState(() => hasAnswerLines = val),
+                ),
+              ],
+            )
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final text = questionController.text.trim();
+              if (text.isNotEmpty) {
+                setState(() {
+                  worksheet['questions'][index] = {
+                    'questionText': text,
+                    'fillerLines': fillerLines,
+                    'hasAnswerLines': hasAnswerLines,
+                    'answerSpaces': answerSpaces,
+                  };
+                });
+                Navigator.pop(context);
+                await saveWorksheet(); // save to file
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+void _openAddDialog() {
+  final TextEditingController questionController = TextEditingController();
+  int fillerLines = 1;
+  bool answerLines = true;
+  int answerSpaces = 1;
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add Question'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: questionController,
+                decoration: const InputDecoration(labelText: 'Question Text'),
+              ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Filler Lines'),
+                keyboardType: TextInputType.number,
+                onChanged: (val) {
+                  fillerLines = int.tryParse(val) ?? 1;
+                },
+              ),
+              TextField(
+                decoration: const InputDecoration(labelText: 'Answer Spaces'),
+                keyboardType: TextInputType.number,
+                onChanged: (val) {
+                  answerSpaces = int.tryParse(val) ?? 1;
+                },
+              ),
+              Row(
+                children: [
+                  const Text('Answer Lines'),
+                  const Spacer(),
+                  Switch(
+                    value: answerLines,
+                    onChanged: (val) {
+                      setState(() => answerLines = val);
+                    },
+                  ),
+                ],
+              ),
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _questions[index] = Question(
-                    text: textController.text,
-                    qaSpace: int.tryParse(qaSpaceController.text) ?? 0,
-                    hasAnswerLines: hasLines,
-                    answerLineCount: hasLines
-                        ? int.tryParse(answerLineCountController.text) ?? 0
-                        : 0,
-                  );
-                });
-                Navigator.pop(context);
+              onPressed: () async {
+                final text = questionController.text.trim();
+                if (text.isNotEmpty) {
+                  setState(() {
+                    worksheet['questions'].add({
+                      'questionText': text,
+                      'fillerLines': fillerLines,
+                      'hasAnswerLines': answerLines,
+                      'answerSpaces': answerSpaces,
+                    });
+                  });
+
+                  Navigator.pop(context);
+                  await saveWorksheet(); // Save to file
+                }
               },
-              child: Text('Save'),
+              child: const Text('Add'),
             ),
           ],
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
-  void _openAddDialog(BuildContext context) {
 
-    // Controllers initialized with existing values
-    final textController = TextEditingController(text: '');
-    final qaSpaceController = TextEditingController(text: '1');
-    bool hasLines = false;
-    final answerLineCountController = TextEditingController(text: '1');
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Add Question'),
-          content: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextField(
-                  controller: textController,
-                  minLines: 1,
-                  maxLines: null,
-                  decoration: InputDecoration(labelText: 'Question Text'),
-                ),
-                TextField(
-                  controller: qaSpaceController,
-                  decoration: InputDecoration(labelText: 'QA Space'),
-                  keyboardType: TextInputType.number,
-                ),
-                SwitchListTile(
-                  title: Text('Has Answer Lines'),
-                  value: hasLines,
-                  onChanged: (val) {
-                    hasLines = val;
-                    // Rebuild the dialog to reflect changes if needed
-                    (context as Element).markNeedsBuild();
-                  },
-                ),
-                if (hasLines)
-                  TextField(
-                    controller: answerLineCountController,
-                    decoration: InputDecoration(labelText: 'Answer Line Count'),
-                    keyboardType: TextInputType.number,
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _questions.add(Question(
-                    text: textController.text,
-                    qaSpace: int.tryParse(qaSpaceController.text) ?? 0,
-                    hasAnswerLines: hasLines,
-                    answerLineCount: hasLines
-                        ? int.tryParse(answerLineCountController.text) ?? 0
-                        : 0,
-                  ));
-                });
-                Navigator.pop(context);
-              },
-              child: Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   
 }
 
 
 
-class Question {
-  final String text;
-  final int qaSpace;
-  final bool hasAnswerLines;
-  final int answerLineCount;
-
-  Question({
-    required this.text,
-    required this.qaSpace,
-    required this.hasAnswerLines,
-    required this.answerLineCount,
-  });
-
-  // JSON serialization for Firestore/local storage
-  Map<String, dynamic> toJson() => {
-    'text': text,
-    'qaSpace': qaSpace,
-    'hasAnswerLines': hasAnswerLines,
-    'answerLineCount': answerLineCount,
-  };
-
-  factory Question.fromJson(Map<String, dynamic> json) => Question(
-    text: json['text'] ?? '',
-    qaSpace: json['qaSpace'] ?? 0,
-    hasAnswerLines: json['hasAnswerLines'] ?? false,
-    answerLineCount: json['answerLineCount'] ?? 0,
-  );
-
-}
