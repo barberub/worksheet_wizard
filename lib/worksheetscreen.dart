@@ -68,26 +68,50 @@ class _SecondScreenState extends State<SecondScreen> {
     if (value == 'print') {
       if (worksheet['questions'].isEmpty) return;
 
-      final question = worksheet['questions'][0];
       final pdf = pw.Document();
+      final questions = List<Map<String, dynamic>>.from(worksheet['questions']);
 
       pdf.addPage(
         pw.Page(
+          margin: const pw.EdgeInsets.all(32),
           build: (pw.Context context) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Question 1:', style: pw.TextStyle(fontSize: 18)),
-                pw.SizedBox(height: 8),
-                pw.Text(question['questionText'], style: pw.TextStyle(fontSize: 14)),
-                pw.SizedBox(height: 8),
-                ...List.generate(question['answerSpaces'], (_) => 
-                  pw.Container(
-                    margin: const pw.EdgeInsets.only(bottom: 12),
-                    height: 2,
-                    color: PdfColors.black,
-                  )
+                pw.Text(
+                  worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
+                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
                 ),
+                pw.SizedBox(height: 20),
+
+                // Loop through questions
+                for (int i = 0; i < questions.length; i++) ...[
+                  pw.Text(
+                    'Question ${i + 1}:',
+                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    questions[i]['questionText'] ?? '',
+                    style: pw.TextStyle(fontSize: 14),
+                  ),
+                  pw.SizedBox(height: 8),
+
+                  // Filler spacing (optional)
+                  for (int j = 0; j < (questions[i]['fillerLines'] ?? 0); j++)
+                    pw.SizedBox(height: 12),
+
+                  // Answer lines
+                  if (questions[i]['hasAnswerLines'] == true)
+                    for (int j = 0; j < (questions[i]['answerSpaces'] ?? 0); j++)
+                      pw.Container(
+                        margin: const pw.EdgeInsets.only(bottom: 12),
+                        height: 1.5,
+                        color: PdfColors.black,
+                      ),
+
+                  pw.SizedBox(height: 20),
+                ],
               ],
             );
           },
@@ -223,17 +247,69 @@ class _SecondScreenState extends State<SecondScreen> {
                     rectangleHeight = rectangleWidth / _paperAspectRatio;
                   }
 
+                  // 🔤 Calculate scaling factor based on A4 height
+                  const double baseHeight = 842.0; // PDF page height in points
+                  const double baseFontSize = 14.0;
+                  final double fontScale = rectangleHeight / baseHeight;
+                  final double scaledFontSize = baseFontSize * fontScale;
+
+                  const double baseLineHeight = 1.0;
+                  final double scaledLineHeight = baseLineHeight * fontScale;
+
                   return Center(
                     child: SizedBox(
                       width: rectangleWidth,
                       height: rectangleHeight,
                       child: Container(
                         color: Colors.white,
+                        padding: EdgeInsets.all(20 * fontScale),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
+                                style: TextStyle(
+                                  fontSize: scaledFontSize * 1.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: 16 * fontScale),
+                              for (final entry in worksheet['questions'].asMap().entries) ...[
+
+                                // Question text
+                                Text(
+                                  'Question ${entry.key + 1}: ${entry.value['questionText']}',
+                                  style: TextStyle(
+                                    fontSize: scaledFontSize,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+
+                                // Filler lines
+                                for (int i = 0; i < (entry.value['fillerLines'] ?? 0); i++)
+                                  SizedBox(height: 8 * fontScale),
+
+                                // Answer lines (if enabled)
+
+                                for (int i = 0; i < (entry.value['answerSpaces'] ?? 0); i++)
+                                  Container(
+                                    margin:  EdgeInsets.symmetric(vertical: 4 * fontScale),
+                                    height: scaledLineHeight,
+                                    color: (entry.value['hasAnswerLines']) ? Colors.black : Colors.white,
+                                  ),
+                                SizedBox(height: 20 * fontScale), // Space between questions
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   );
                 },
               ),
+
             ),
           ),
         
@@ -253,8 +329,12 @@ class _SecondScreenState extends State<SecondScreen> {
     final TextEditingController questionController =
         TextEditingController(text: question['questionText']);
     int fillerLines = question['fillerLines'];
+    final TextEditingController fillerLinesController =
+      TextEditingController(text: fillerLines.toString());
     bool hasAnswerLines = question['hasAnswerLines'];
     int answerSpaces = question['answerSpaces'];
+    final TextEditingController answerSpacesController =
+      TextEditingController(text: answerSpaces.toString());
 
     showDialog(
       context: context,
@@ -268,14 +348,20 @@ class _SecondScreenState extends State<SecondScreen> {
               decoration: const InputDecoration(labelText: 'Question Text'),
             ),
             TextField(
+              controller: fillerLinesController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Filler Lines'),
-              onChanged: (val) => fillerLines = int.tryParse(val) ?? fillerLines,
+              onChanged: (val) {
+                fillerLines = int.tryParse(val) ?? fillerLines;
+              },
             ),
             TextField(
+              controller: answerSpacesController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: 'Answer Spaces'),
-              onChanged: (val) => answerSpaces = int.tryParse(val) ?? answerSpaces,
+              onChanged: (val) {
+                answerSpaces = int.tryParse(val) ?? answerSpaces;
+              },
             ),
             Row(
               children: [
@@ -319,9 +405,15 @@ class _SecondScreenState extends State<SecondScreen> {
 
 void _openAddDialog() {
   final TextEditingController questionController = TextEditingController();
+  
   int fillerLines = 1;
+  final TextEditingController fillerLinesController =
+    TextEditingController(text: fillerLines.toString());
   bool answerLines = true;
+  
   int answerSpaces = 1;
+  final TextEditingController answerSpacesController =
+    TextEditingController(text: answerSpaces.toString());
 
   showDialog(
     context: context,
@@ -337,18 +429,14 @@ void _openAddDialog() {
                 decoration: const InputDecoration(labelText: 'Question Text'),
               ),
               TextField(
+                controller: fillerLinesController,
                 decoration: const InputDecoration(labelText: 'Filler Lines'),
                 keyboardType: TextInputType.number,
-                onChanged: (val) {
-                  fillerLines = int.tryParse(val) ?? 1;
-                },
               ),
               TextField(
+                controller: answerSpacesController,
                 decoration: const InputDecoration(labelText: 'Answer Spaces'),
                 keyboardType: TextInputType.number,
-                onChanged: (val) {
-                  answerSpaces = int.tryParse(val) ?? 1;
-                },
               ),
               Row(
                 children: [
