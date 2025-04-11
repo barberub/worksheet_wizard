@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'worksheetscreen.dart';
 import 'storage_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 
-void main() {
+void main() async{
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const MainApp());
 }
 
@@ -158,6 +162,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Worksheet Wizard'),
+        actions: [
+        IconButton(
+          icon: const Icon(Icons.person),
+          onPressed: _showAccountDialog,
+        ),
+        ],
       ),
       body: Container(
         color: Colors.grey[800],
@@ -199,6 +209,82 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+    void _showAccountDialog() {
+    final TextEditingController emailController = TextEditingController();
+    final TextEditingController passwordController = TextEditingController();
+    final user = FirebaseAuth.instance.currentUser;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: Text(user == null ? 'Login' : 'Account'),
+            content: user == null
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: emailController,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password'),
+                      ),
+                    ],
+                  )
+                : Text('Logged in as: ${user.email}'),
+            actions: [
+              if (user == null) ...[
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      await FirebaseAuth.instance.signInWithEmailAndPassword(
+                        email: emailController.text.trim(),
+                        password: passwordController.text.trim(),
+                      );
+                      Navigator.pop(context);
+                      setState(() {});
+                    } catch (e) {
+                      print('Login error: $e');
+                    }
+                  },
+                  child: const Text('Login'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+                        email: emailController.text.trim(),
+                        password: passwordController.text.trim(),
+                      );
+                      Navigator.pop(context);
+                      setState(() {});
+                    } catch (e) {
+                      print('Signup error: $e');
+                    }
+                  },
+                  child: const Text('Sign Up'),
+                ),
+              ] else
+                TextButton(
+                  onPressed: () async {
+                    await FirebaseAuth.instance.signOut();
+                    Navigator.pop(context);
+                    setState(() {});
+                  },
+                  child: const Text('Logout'),
+                ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
 
 }
 
