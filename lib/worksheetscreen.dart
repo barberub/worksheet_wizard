@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+
+import 'dart:typed_data';
+import 'dart:ui' as ui; // for toImage
+import 'package:flutter/rendering.dart'; // for RenderRepaintBoundary
 
 import 'storage_service.dart';
 
@@ -35,10 +40,13 @@ class _SecondScreenState extends State<SecondScreen> {
   bool _isExpanded = false;
   final StorageService storage = StorageService();
 
+  final List<GlobalKey> _mathKeys = [];
+
 
   @override
   void initState() {
     super.initState();
+    _mathKeys.clear();
     worksheet = Map<String, dynamic>.from(widget.worksheetData);
   }
 
@@ -63,64 +71,10 @@ class _SecondScreenState extends State<SecondScreen> {
     });
   }
 
-    void _onSelected(String value) async {
+  void _onSelected(String value) async {
     // Handle dropdown menu selection
     if (value == 'print') {
-      if (worksheet['questions'].isEmpty) return;
-
-      final pdf = pw.Document();
-      final questions = List<Map<String, dynamic>>.from(worksheet['questions']);
-
-      pdf.addPage(
-        pw.Page(
-          margin: const pw.EdgeInsets.all(32),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
-                  style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 20),
-
-                // Loop through questions
-                for (int i = 0; i < questions.length; i++) ...[
-                  pw.Text(
-                    'Question ${i + 1}:',
-                    style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Text(
-                    questions[i]['questionText'] ?? '',
-                    style: pw.TextStyle(fontSize: 14),
-                  ),
-                  pw.SizedBox(height: 8),
-
-                  // Filler spacing (optional)
-                  for (int j = 0; j < (questions[i]['fillerLines'] ?? 0); j++)
-                    pw.SizedBox(height: 12),
-
-                  // Answer lines
-                  if (questions[i]['hasAnswerLines'] == true)
-                    for (int j = 0; j < (questions[i]['answerSpaces'] ?? 0); j++)
-                      pw.Container(
-                        margin: const pw.EdgeInsets.only(bottom: 12),
-                        height: 1.5,
-                        color: PdfColors.black,
-                      ),
-
-                  pw.SizedBox(height: 20),
-                ],
-              ],
-            );
-          },
-        ),
-      );
-
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-      );
+      exportWorksheetWithMath();
     }
 
     if (value == 'layout') {
@@ -206,7 +160,21 @@ class _SecondScreenState extends State<SecondScreen> {
                         itemBuilder: (context, index) {
                           final question = worksheet['questions'][index];
                           return ListTile(
-                            title: Text('Question ${index + 1}: ${question['questionText']}'),
+                            title: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Question ${index + 1}:'),
+                                SizedBox(height: 4),
+                                RichText(
+                                  text: TextSpan(
+                                    children: parseTextWithMath(
+                                      question['questionText'] ?? '',
+                                      textStyle: TextStyle(fontSize: 16, color: Colors.black),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                             trailing: IconButton(
                               icon: Icon(Icons.edit),
                               onPressed: () => _openEditDialog(index),
@@ -237,7 +205,7 @@ class _SecondScreenState extends State<SecondScreen> {
               color: const Color(0xFF424242),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  double availableHeight = constraints.maxHeight - _bufferSpace;
+                  double availableHeight = (constraints.maxHeight - _bufferSpace).clamp(0.0, double.infinity);
                   double rectangleHeight = availableHeight * 0.75;
                   double rectangleWidth = rectangleHeight * _paperAspectRatio;
 
@@ -277,15 +245,31 @@ class _SecondScreenState extends State<SecondScreen> {
                               SizedBox(height: 16 * fontScale),
                               for (final entry in worksheet['questions'].asMap().entries) ...[
 
-                                // Question text
-                                Text(
-                                  'Question ${entry.key + 1}: ${entry.value['questionText']}',
-                                  style: TextStyle(
-                                    fontSize: scaledFontSize,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Question ${entry.key + 1}:',
+                                      style: TextStyle(
+                                        fontSize: scaledFontSize,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    RichText(
+                                      text: TextSpan(
+                                        children: parseTextWithMath(
+                                          entry.value['questionText'] ?? '',
+                                          textStyle: TextStyle(
+                                            fontSize: scaledFontSize,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
+
 
                                 // Filler lines
                                 for (int i = 0; i < (entry.value['fillerLines'] ?? 0); i++)
@@ -312,14 +296,31 @@ class _SecondScreenState extends State<SecondScreen> {
 
             ),
           ),
-        
+
+                  // Add this *outside* your main visible UI
+          // It renders invisible math widgets to prepare for PDF capture
+          Transform.translate(
+            offset: Offset(0, 5000),
+            child: Column(
+              children: List.generate(worksheet['questions'].length, (index) {
+                if (_mathKeys.length <= index) {
+                  _mathKeys.add(GlobalKey());
+                }
+
+                return CompositeMathRenderer(
+                  text: worksheet['questions'][index]['questionText'] ?? '',
+                  repaintKey: _mathKeys[index],
+                );
+              }),
+            ),
+          ),
+
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openAddDialog(),
         child: const Icon(Icons.add),
       ),
-      
     );
   }
 
@@ -403,7 +404,7 @@ class _SecondScreenState extends State<SecondScreen> {
   }
 
 
-void _openAddDialog() {
+  void _openAddDialog() {
   final TextEditingController questionController = TextEditingController();
   
   int fillerLines = 1;
@@ -483,10 +484,212 @@ void _openAddDialog() {
   );
 }
 
+  static List<InlineSpan> parseTextWithMath(String input, {TextStyle? textStyle, TextStyle? mathStyle}) {
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'(\$.*?\$)'); // Matches anything between single $...$
 
+    final matches = regex.allMatches(input);
+    int lastEnd = 0;
+
+    for (final match in matches) {
+      // Add plain text before the match
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: input.substring(lastEnd, match.start),
+          style: textStyle,
+        ));
+      }
+
+      // Extract math content without the $ delimiters
+      final mathContent = match.group(0)!.substring(1, match.group(0)!.length - 1);
+      spans.add(WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Math.tex(
+          mathContent,
+          textStyle: mathStyle ?? textStyle,
+        ),
+      ));
+
+      lastEnd = match.end;
+    }
+
+    // Add any remaining text after the last match
+    if (lastEnd < input.length) {
+      spans.add(TextSpan(
+        text: input.substring(lastEnd),
+        style: textStyle,
+      ));
+    }
+
+    return spans;
+  }
+
+  void exportWorksheetWithMath() {
+  if (worksheet['questions'].isEmpty) return;
+
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    final pdf = pw.Document();
+    final questions = List<Map<String, dynamic>>.from(worksheet['questions']);
+
+    final List<(Uint8List, ui.Image)?> renderedImages = [];
+
+    for (int i = 0; i < questions.length; i++) {
+      final questionText = questions[i]['questionText'] ?? '';
+
+      Uint8List? bytes;
+      ui.Image? image;
+      int retry = 0;
+
+      while ((bytes == null || image == null) && retry < 10) {
+        try {
+          final result = await captureMathAsImage(_mathKeys[i]);
+          bytes = result.$1;
+          image = result.$2;
+        } catch (_) {
+          await Future.delayed(Duration(milliseconds: 50));
+          retry++;
+        }
+      }
+
+      if (bytes != null && image != null) {
+        renderedImages.add((bytes, image));
+      } else {
+        renderedImages.add(null);
+      }
+    }
+
+    pdf.addPage(
+      pw.Page(
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 20),
+
+              for (int i = 0; i < questions.length; i++) ...[
+                pw.Text(
+                  'Question ${i + 1}:',
+                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
+
+                if (renderedImages[i] != null) ...[
+                  // Dynamically scale based on image dimensions
+                  () {
+                    final (bytes, img) = renderedImages[i]!;
+                    final imgWidth = img.width.toDouble();
+                    final imgHeight = img.height.toDouble();
+                    final scaleFactor = 0.75;
+
+                    const maxPdfWidth = 400.0;
+                    final scale = imgWidth > maxPdfWidth
+                        ? (maxPdfWidth / imgWidth) * scaleFactor
+                        : 1.0 * scaleFactor;
+
+                    final finalWidth = imgWidth * scale;
+                    final finalHeight = imgHeight * scale;
+
+                    return pw.Image(
+                      pw.MemoryImage(bytes),
+                      width: finalWidth,
+                      height: finalHeight,
+                    );
+                  }(),
+                ] else ...[
+                  pw.Text(
+                    questions[i]['questionText'] ?? '',
+                    style: pw.TextStyle(fontSize: 14),
+                  ),
+                ],
+
+                pw.SizedBox(height: 8),
+
+                for (int j = 0; j < (questions[i]['fillerLines'] ?? 0); j++)
+                  pw.SizedBox(height: 12),
+
+                if (questions[i]['hasAnswerLines'] == true)
+                  for (int j = 0; j < (questions[i]['answerSpaces'] ?? 0); j++)
+                    pw.Container(
+                      margin: const pw.EdgeInsets.only(bottom: 12),
+                      height: 1.5,
+                      color: PdfColors.black,
+                    ),
+
+                pw.SizedBox(height: 20),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  });
+}
 
   
+  Future<(Uint8List, ui.Image)> captureMathAsImage(GlobalKey key) async {
+    final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) throw Exception("Render object not found for math image capture.");
+
+    await Future.delayed(Duration(milliseconds: 20));
+    await WidgetsBinding.instance.endOfFrame;
+
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final bytes = byteData!.buffer.asUint8List();
+
+    return (bytes, image); // Dart 3.0 tuple syntax
+  }
+
+
 }
+
+
+class CompositeMathRenderer extends StatelessWidget {
+  final String text;
+  final GlobalKey repaintKey;
+
+  const CompositeMathRenderer({
+    Key? key,
+    required this.text,
+    required this.repaintKey,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final spans = _SecondScreenState.parseTextWithMath(
+      text,
+      textStyle: const TextStyle(fontSize: 18, color: Colors.black),
+    );
+
+    return RepaintBoundary(
+      key: repaintKey,
+      child: SizedBox(
+        width: 300, // 💡 Force layout width (adjust as needed)
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: spans.map((span) {
+            if (span is TextSpan) {
+              return Text(span.text ?? '', style: span.style);
+            } else if (span is WidgetSpan) {
+              return span.child;
+            } else {
+              return const SizedBox.shrink();
+            }
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+
 
 
 
