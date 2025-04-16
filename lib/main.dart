@@ -210,10 +210,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-    void _showAccountDialog() {
+  void _showAccountDialog() {
     final TextEditingController emailController = TextEditingController();
     final TextEditingController passwordController = TextEditingController();
     final user = FirebaseAuth.instance.currentUser;
+
+    String? errorMessage; // 👈 to store the error
 
     showDialog(
       context: context,
@@ -234,6 +236,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         obscureText: true,
                         decoration: const InputDecoration(labelText: 'Password'),
                       ),
+                      if (errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            errorMessage!,
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
                     ],
                   )
                 : Text('Logged in as: ${user.email}'),
@@ -246,10 +256,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         email: emailController.text.trim(),
                         password: passwordController.text.trim(),
                       );
-                      Navigator.pop(context);
-                      setState(() {});
+                      Navigator.pop(context); // close dialog on success
+                      setState(() {}); // refresh
+                      setState(() => errorMessage = null); // clear error
+
+                      // ✅ Show success message
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Successfully logged in!'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
                     } catch (e) {
                       print('Login error: $e');
+                      setState(() => errorMessage = 'Login failed: ${_formatFirebaseError(e)}');
                     }
                   },
                   child: const Text('Login'),
@@ -262,9 +283,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         password: passwordController.text.trim(),
                       );
                       Navigator.pop(context);
-                      setState(() {});
+                      setState(() => errorMessage = null);
+                                            // ✅ Show success message
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Successfully signed up!'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
                     } catch (e) {
                       print('Signup error: $e');
+                      setState(() => errorMessage = 'Signup failed: ${_formatFirebaseError(e)}');
                     }
                   },
                   child: const Text('Sign Up'),
@@ -284,6 +314,14 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+
+  String _formatFirebaseError(dynamic e) {
+    if (e is FirebaseAuthException) {
+      return e.message ?? 'Unknown error';
+    }
+    return e.toString();
+  }
+
 
 
 }
