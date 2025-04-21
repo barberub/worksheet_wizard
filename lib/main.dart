@@ -126,6 +126,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 final newWorksheet = {
                   "worksheetTitle": name,
                   "questions": [],
+                  "formatting": {
+                    "layout": "single-column",
+                    "columns" : 1
+                  },
+                  "cloudID" : null,
+                  "lastSaved" : null,
                 };
 
                 final current = await storage.readWorksheets();
