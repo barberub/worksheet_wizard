@@ -10,6 +10,7 @@ import 'dart:ui' as ui; // for toImage
 import 'package:flutter/rendering.dart'; // for RenderRepaintBoundary
 
 import 'storage_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SecondScreen extends StatefulWidget {
   final Map<String, dynamic> worksheetData;
@@ -94,233 +95,253 @@ class _SecondScreenState extends State<SecondScreen> {
     // double appBarHeight = MediaQuery.of(context).padding.top + kToolbarHeight;
     // double remainingHeight = MediaQuery.of(context).size.height - appBarHeight - _expandedHeight;
 
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(worksheet['worksheetTitle']),
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: _onSelected,
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem(value: 'print', child: Text('Print')),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Expandable Section (Now Lighter)
-          GestureDetector(
-            onTap: _toggleExpansion,
-            onVerticalDragUpdate: _handleDragUpdate,
-            onVerticalDragEnd: _handleDragEnd,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              height: _expandedHeight,
-              width: double.infinity, // Prevents overflow
-              decoration: const BoxDecoration(
-                color: Colors.grey,
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Show "Questions" only when collapsed
-                  if (!_isExpanded)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 10),
-                      child: Text(
-                        "Questions",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
+    return PopScope(
+    canPop: true, // this is like "default behavior"
+    onPopInvokedWithResult: (didPop, result)  async {
+      if (didPop ) return; // user already popped (e.g., from gesture), skip
+      print("hello?!");
+      final shouldSave = await _confirmSaveToCloudDialog();
 
-                  // Expandable Content
-                  if (_isExpanded)
-                    Expanded(
-                      child: worksheet['questions'].isEmpty
-                      ? Center(
+      if (shouldSave) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await storage.cloudSave(worksheet, uid);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved to cloud ✅')),
+          );
+        }
+      }
+
+      Navigator.pop(context); // manually pop after logic
+    },
+      child: Scaffold(
+        
+        appBar: AppBar(
+          title: Text(worksheet['worksheetTitle']),
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: _onSelected,
+              itemBuilder: (BuildContext context) => [
+                PopupMenuItem(value: 'print', child: Text('Print')),
+              ],
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            // Expandable Section (Now Lighter)
+            GestureDetector(
+              onTap: _toggleExpansion,
+              onVerticalDragUpdate: _handleDragUpdate,
+              onVerticalDragEnd: _handleDragEnd,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                height: _expandedHeight,
+                width: double.infinity, // Prevents overflow
+                decoration: const BoxDecoration(
+                  color: Colors.grey,
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Show "Questions" only when collapsed
+                    if (!_isExpanded)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 10),
                         child: Text(
-                          'No Questions!',
+                          "Questions",
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
-                          )
-                          ),
-                        )
-                      : ListView.builder(
-                        padding: EdgeInsets.zero,
-                        itemCount: worksheet['questions'].length,
-                        itemBuilder: (context, index) {
-                          final question = worksheet['questions'][index];
-                          return ListTile(
-                            title: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Question ${index + 1}:'),
-                                SizedBox(height: 4),
-                                RichText(
-                                  text: TextSpan(
-                                    children: parseTextWithMath(
-                                      question['questionText'] ?? '',
-                                      textStyle: TextStyle(fontSize: 16, color: Colors.black),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: Icon(Icons.edit),
-                              onPressed: () => _openEditDialog(index),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                  // Notch (Inside)
-                  Container(
-                    width: 50,
-                    height: 5,
-                    margin: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Section (Now Darker)
-          Expanded(
-            child: Container(
-              color: const Color(0xFF424242),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  double availableHeight = (constraints.maxHeight - _bufferSpace).clamp(0.0, double.infinity);
-                  double rectangleHeight = availableHeight * 0.75;
-                  double rectangleWidth = rectangleHeight * _paperAspectRatio;
-
-                  // Ensure the rectangle never exceeds screen width
-                  if (rectangleWidth > constraints.maxWidth * 0.9) {
-                    rectangleWidth = constraints.maxWidth * 0.9;
-                    rectangleHeight = rectangleWidth / _paperAspectRatio;
-                  }
-
-                  // 🔤 Calculate scaling factor based on A4 height
-                  const double baseHeight = 842.0; // PDF page height in points
-                  const double baseFontSize = 14.0;
-                  final double fontScale = rectangleHeight / baseHeight;
-                  final double scaledFontSize = baseFontSize * fontScale;
-
-                  const double baseLineHeight = 1.0;
-                  final double scaledLineHeight = baseLineHeight * fontScale;
-
-                  return Center(
-                    child: SizedBox(
-                      width: rectangleWidth,
-                      height: rectangleHeight,
-                      child: Container(
-                        color: Colors.white,
-                        padding: EdgeInsets.all(20 * fontScale),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
-                                style: TextStyle(
-                                  fontSize: scaledFontSize * 1.5,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 16 * fontScale),
-                              for (final entry in worksheet['questions'].asMap().entries) ...[
-
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Question ${entry.key + 1}:',
-                                      style: TextStyle(
-                                        fontSize: scaledFontSize,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black,
-                                      ),
-                                    ),
-                                    RichText(
-                                      text: TextSpan(
-                                        children: parseTextWithMath(
-                                          entry.value['questionText'] ?? '',
-                                          textStyle: TextStyle(
-                                            fontSize: scaledFontSize,
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-
-                                // Filler lines
-                                for (int i = 0; i < (entry.value['fillerLines'] ?? 0); i++)
-                                  SizedBox(height: 8 * fontScale),
-
-                                // Answer lines (if enabled)
-
-                                for (int i = 0; i < (entry.value['answerSpaces'] ?? 0); i++)
-                                  Container(
-                                    margin:  EdgeInsets.symmetric(vertical: 4 * fontScale),
-                                    height: scaledLineHeight,
-                                    color: (entry.value['hasAnswerLines']) ? Colors.black : Colors.white,
-                                  ),
-                                SizedBox(height: 20 * fontScale), // Space between questions
-                              ],
-                            ],
                           ),
                         ),
                       ),
+
+                    // Expandable Content
+                    if (_isExpanded)
+                      Expanded(
+                        child: worksheet['questions'].isEmpty
+                        ? Center(
+                          child: Text(
+                            'No Questions!',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            )
+                            ),
+                          )
+                        : ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: worksheet['questions'].length,
+                          itemBuilder: (context, index) {
+                            final question = worksheet['questions'][index];
+                            return ListTile(
+                              title: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Question ${index + 1}:'),
+                                  SizedBox(height: 4),
+                                  RichText(
+                                    text: TextSpan(
+                                      children: parseTextWithMath(
+                                        question['questionText'] ?? '',
+                                        textStyle: TextStyle(fontSize: 16, color: Colors.black),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: Icon(Icons.edit),
+                                onPressed: () => _openEditDialog(index),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    // Notch (Inside)
+                    Container(
+                      width: 50,
+                      height: 5,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
-
             ),
-          ),
 
-                  // Add this *outside* your main visible UI
-          // It renders invisible math widgets to prepare for PDF capture
-          Transform.translate(
-            offset: Offset(0, 5000),
-            child: Column(
-              children: List.generate(worksheet['questions'].length, (index) {
-                if (_mathKeys.length <= index) {
-                  _mathKeys.add(GlobalKey());
-                }
+            // Bottom Section (Now Darker)
+            Expanded(
+              child: Container(
+                color: const Color(0xFF424242),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    double availableHeight = (constraints.maxHeight - _bufferSpace).clamp(0.0, double.infinity);
+                    double rectangleHeight = availableHeight * 0.75;
+                    double rectangleWidth = rectangleHeight * _paperAspectRatio;
 
-                return CompositeMathRenderer(
-                  text: worksheet['questions'][index]['questionText'] ?? '',
-                  repaintKey: _mathKeys[index],
-                );
-              }),
+                    // Ensure the rectangle never exceeds screen width
+                    if (rectangleWidth > constraints.maxWidth * 0.9) {
+                      rectangleWidth = constraints.maxWidth * 0.9;
+                      rectangleHeight = rectangleWidth / _paperAspectRatio;
+                    }
+
+                    // 🔤 Calculate scaling factor based on A4 height
+                    const double baseHeight = 842.0; // PDF page height in points
+                    const double baseFontSize = 14.0;
+                    final double fontScale = rectangleHeight / baseHeight;
+                    final double scaledFontSize = baseFontSize * fontScale;
+
+                    const double baseLineHeight = 1.0;
+                    final double scaledLineHeight = baseLineHeight * fontScale;
+
+                    return Center(
+                      child: SizedBox(
+                        width: rectangleWidth,
+                        height: rectangleHeight,
+                        child: Container(
+                          color: Colors.white,
+                          padding: EdgeInsets.all(20 * fontScale),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  worksheet['worksheetTitle'] ?? 'Untitled Worksheet',
+                                  style: TextStyle(
+                                    fontSize: scaledFontSize * 1.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 16 * fontScale),
+                                for (final entry in worksheet['questions'].asMap().entries) ...[
+
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Question ${entry.key + 1}:',
+                                        style: TextStyle(
+                                          fontSize: scaledFontSize,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      RichText(
+                                        text: TextSpan(
+                                          children: parseTextWithMath(
+                                            entry.value['questionText'] ?? '',
+                                            textStyle: TextStyle(
+                                              fontSize: scaledFontSize,
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+
+                                  // Filler lines
+                                  for (int i = 0; i < (entry.value['fillerLines'] ?? 0); i++)
+                                    SizedBox(height: 8 * fontScale),
+
+                                  // Answer lines (if enabled)
+
+                                  for (int i = 0; i < (entry.value['answerSpaces'] ?? 0); i++)
+                                    Container(
+                                      margin:  EdgeInsets.symmetric(vertical: 4 * fontScale),
+                                      height: scaledLineHeight,
+                                      color: (entry.value['hasAnswerLines']) ? Colors.black : Colors.white,
+                                    ),
+                                  SizedBox(height: 20 * fontScale), // Space between questions
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+              ),
             ),
-          ),
 
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openAddDialog(),
-        child: const Icon(Icons.add),
-      ),
+                    // Add this *outside* your main visible UI
+            // It renders invisible math widgets to prepare for PDF capture
+            Transform.translate(
+              offset: Offset(0, 5000),
+              child: Column(
+                children: List.generate(worksheet['questions'].length, (index) {
+                  if (_mathKeys.length <= index) {
+                    _mathKeys.add(GlobalKey());
+                  }
+
+                  return CompositeMathRenderer(
+                    text: worksheet['questions'][index]['questionText'] ?? '',
+                    repaintKey: _mathKeys[index],
+                  );
+                }),
+              ),
+            ),
+
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _openAddDialog(),
+          child: const Icon(Icons.add),
+        ),
+      )
     );
   }
 
@@ -645,6 +666,20 @@ class _SecondScreenState extends State<SecondScreen> {
     final bytes = byteData!.buffer.asUint8List();
 
     return (bytes, image); // Dart 3.0 tuple syntax
+  }
+
+  Future<bool> _confirmSaveToCloudDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Save to Cloud?'),
+        content: Text('Would you like to save this worksheet to the cloud before leaving?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('No')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: Text('Yes')),
+        ],
+      ),
+    ) ?? false;
   }
 
 

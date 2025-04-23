@@ -130,8 +130,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     "layout": "single-column",
                     "columns" : 1
                   },
-                  "cloudID" : null,
+                  "wID" : null,
                   "lastSaved" : null,
+                  "creator" : null,
                 };
 
                 final current = await storage.readWorksheets();
