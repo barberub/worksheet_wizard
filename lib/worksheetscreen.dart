@@ -11,6 +11,7 @@ import 'package:flutter/rendering.dart'; // for RenderRepaintBoundary
 
 import 'storage_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SecondScreen extends StatefulWidget {
   final Map<String, dynamic> worksheetData;
@@ -86,9 +87,10 @@ class _SecondScreenState extends State<SecondScreen> {
   Future<void> saveWorksheet() async {
     // Update the worksheet in the overall list
     widget.allWorksheets[widget.worksheetIndex] = worksheet;
+    worksheet['lastModified'] = Timestamp.now();
     await storage.saveWorksheets(widget.allWorksheets);
     widget.onSave?.call(); // to refresh HomeScreen if needed
-  }
+  } 
 
   @override
   Widget build(BuildContext context) {
@@ -96,16 +98,28 @@ class _SecondScreenState extends State<SecondScreen> {
     // double remainingHeight = MediaQuery.of(context).size.height - appBarHeight - _expandedHeight;
 
     return PopScope(
-    canPop: true, // this is like "default behavior"
+    canPop: false, // this is like "default behavior"
     onPopInvokedWithResult: (didPop, result)  async {
       if (didPop ) return; // user already popped (e.g., from gesture), skip
-      print("hello?!");
+      
+      
+        // Check for unsaved changes
+        final lastSaved = worksheet['lastSaved'];
+        final lastModified = worksheet['lastModified'];
+        final hasUnsavedChanges = lastSaved == null || lastSaved != lastModified;
+
+        if (!hasUnsavedChanges) {
+          Navigator.pop(context);
+          return;
+        }
+
       final shouldSave = await _confirmSaveToCloudDialog();
 
       if (shouldSave) {
         final uid = FirebaseAuth.instance.currentUser?.uid;
         if (uid != null) {
           await storage.cloudSave(worksheet, uid);
+          await saveWorksheet();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Saved to cloud ✅')),
           );

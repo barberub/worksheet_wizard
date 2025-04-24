@@ -3,6 +3,7 @@ import 'worksheetscreen.dart';
 import 'storage_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 
 void main() async{
@@ -170,10 +171,15 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Worksheet Wizard'),
         actions: [
-        IconButton(
-          icon: const Icon(Icons.person),
-          onPressed: _showAccountDialog,
-        ),
+          IconButton(
+            icon: const Icon(Icons.cloud_download),
+            tooltip: 'Load from Cloud',
+            onPressed: _loadFromCloud,
+          ),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: _showAccountDialog,
+          ),
         ],
       ),
       body: Container(
@@ -188,8 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemBuilder: (context, index) {
                   final worksheet = worksheets[index];
                   return Card(
-                    margin: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     child: ListTile(
                       title: Text(worksheet['worksheetTitle']),
                       onTap: () {
@@ -204,9 +209,48 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         );
-                      }
+                      },
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          if (value == 'delete_local') {
+                            setState(() {
+                              worksheets.removeAt(index);
+                            });
+                            await storage.saveWorksheets(worksheets);
+                          } else if (value == 'delete_cloud') {
+                            final wID = worksheet['wID'];
+                            if (wID != null) {
+                              await FirebaseFirestore.instance.collection('worksheets').doc(wID).delete();
+                            }
+                            setState(() {
+                              worksheets.removeAt(index);
+                            });
+                            await storage.saveWorksheets(worksheets);
+                          }
+                        },
+                        itemBuilder: (context) {
+                          final items = <PopupMenuEntry<String>>[
+                            const PopupMenuItem(
+                              value: 'delete_local',
+                              child: Text('Delete Locally'),
+                            ),
+                          ];
+
+                          if (worksheet['wID'] != null) {
+                            items.add(
+                              const PopupMenuItem(
+                                value: 'delete_cloud',
+                                child: Text('Delete from Cloud + Local'),
+                              ),
+                            );
+                          }
+
+                          return items;
+                        },
+                      ),
                     ),
                   );
+
                 },
               ),
       ),
@@ -321,6 +365,54 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+
+  Future<void> _loadFromCloud() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Please log in to load from cloud')),
+    );
+    return;
+  }
+
+  try {
+    final snapshot = await FirebaseFirestore.instance
+      .collection('worksheets')
+      .where('creator', isEqualTo: user.uid)
+      .get();
+
+    final cloudWorksheets = snapshot.docs.map((doc) {
+      final data = doc.data();
+      data['wID'] = doc.id; // Ensure wID is set
+      return data;
+    }).toList();
+    final merged = [...worksheets];
+
+    // Only add cloud ones not already in the local list by wID
+    for (final cloudWS in cloudWorksheets) {
+      final wID = cloudWS['wID'];
+      if (wID != null && !merged.any((ws) => ws['wID'] == wID)) {
+        merged.add(cloudWS);
+      }
+    }
+
+    setState(() {
+      worksheets = merged;
+    });
+
+
+    await storage.saveWorksheets(worksheets);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Worksheets loaded from cloud')),
+    );
+  } catch (e) {
+    print('Cloud load error: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to load from cloud')),
+    );
+  }
+}
 
   String _formatFirebaseError(dynamic e) {
     if (e is FirebaseAuthException) {

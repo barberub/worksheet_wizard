@@ -34,13 +34,25 @@ class StorageService {
   Future<void> cloudSave(Map<String, dynamic> worksheet, String uid) async {
     final collection = FirebaseFirestore.instance.collection('worksheets');
     final isNew = worksheet['wID'] == null;
+
     final docRef = isNew ? collection.doc() : collection.doc(worksheet['wID']);
 
-    worksheet['wID'] = docRef.id;
-    worksheet['lastSaved'] = Timestamp.now();
-    worksheet['creator'] = uid;
+    final now = Timestamp.now();
 
-    await docRef.set(worksheet, SetOptions(merge: true));
+    // This is what gets stored in Firestore
+    final worksheetToSave = {
+      ...worksheet,
+      'wID': docRef.id,
+      'lastSaved': now,
+      'creator': uid,
+    };
+
+    await docRef.set(worksheetToSave, SetOptions(merge: true));
+
+    // 🔁 Update original worksheet (local copy) too
+    worksheet['wID'] = docRef.id;
+    worksheet['lastSaved'] = now;
+    worksheet['creator'] = uid;
   } 
 
   Future<List<Map<String, dynamic>>> cloudLoad(
