@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 
+
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -90,7 +91,7 @@ class HomeScreen extends StatefulWidget  {
 class _HomeScreenState extends State<HomeScreen> {
   final StorageService storage = StorageService();
   List<Map<String, dynamic>> worksheets = [];
-
+  
   @override
   void initState() {
     super.initState();
@@ -350,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   child: const Text('Sign Up'),
                 ),
-              ] else
+              ] else ...[
                 TextButton(
                   onPressed: () async {
                     await FirebaseAuth.instance.signOut();
@@ -359,6 +360,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   child: const Text('Logout'),
                 ),
+
+                TextButton(
+                  onPressed: () async {
+                    storage.deleteAccount(context);
+                    Navigator.pop(context);
+                    setState(() {});
+                  },
+                  child: const Text('Delete Account'),
+                ),
+              ]
             ],
           );
         });
