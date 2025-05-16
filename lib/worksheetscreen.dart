@@ -6,8 +6,8 @@ import 'package:printing/printing.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import 'dart:typed_data';
-import 'dart:ui' as ui; // for toImage
-import 'package:flutter/rendering.dart'; // for RenderRepaintBoundary
+import 'dart:ui' as ui; 
+import 'package:flutter/rendering.dart'; 
 
 import 'storage_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -33,15 +33,19 @@ class SecondScreen extends StatefulWidget {
 
 
 class _SecondScreenState extends State<SecondScreen> {
+  // Local worksheet variable to hold changes before saving.
   late Map<String, dynamic> worksheet;
+  // Worksheet preview variables
   double _expandedHeight = 100;
   final double _collapsedHeight = 100;
   final double _maxExpandedHeight = 400;
   final double _bufferSpace = 100;
   final double _paperAspectRatio = 8.5 / 11;
   bool _isExpanded = false;
+
   final StorageService storage = StorageService();
 
+  // To store 
   final List<GlobalKey> _mathKeys = [];
 
 
@@ -73,6 +77,7 @@ class _SecondScreenState extends State<SecondScreen> {
     });
   }
 
+  // Method that branches to behavior from toolbar actions
   void _onSelected(String value) async {
     // Handle dropdown menu selection
     if (value == 'print') {
@@ -103,29 +108,31 @@ class _SecondScreenState extends State<SecondScreen> {
       if (didPop) return; // user already popped (e.g., from gesture), skip
       
       
-        // Check for unsaved changes
-        final lastSaved = worksheet['lastSaved'];
-        final lastModified = worksheet['lastModified'];
-        final hasUnsavedChanges = lastSaved == null || lastSaved != lastModified;
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (!hasUnsavedChanges) {
-          Navigator.pop(context);
-          return;
-        }
+      // Check for unsaved changes
+      final lastSaved = worksheet['lastSaved'];
+      final lastModified = worksheet['lastModified'];
+      final hasUnsavedChanges = lastSaved == null || lastSaved != lastModified;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (!hasUnsavedChanges) {
+        Navigator.pop(context);
+        return;
+      }
+
+      // If logged in.
       if (uid != null) {
-      final shouldSave = await _confirmSaveToCloudDialog();
+        final shouldSave = await _confirmSaveToCloudDialog();
 
-      if (shouldSave) {
+        if (shouldSave) {
 
-          await storage.cloudSave(worksheet, uid);
-          await saveWorksheet();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Saved to cloud ✅')),
-          );
+            await storage.cloudSave(worksheet, uid);
+            await saveWorksheet();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Saved to cloud ✅')),
+            );
+        }
       }
-      }
 
-      Navigator.pop(context); // manually pop after logic
+      Navigator.pop(context);
     },
       child: Scaffold(
         
@@ -142,7 +149,7 @@ class _SecondScreenState extends State<SecondScreen> {
         ),
         body: Column(
           children: [
-            // Expandable Section (Now Lighter)
+            // Expandable Section
             GestureDetector(
               onTap: _toggleExpansion,
               onVerticalDragUpdate: _handleDragUpdate,
@@ -151,7 +158,7 @@ class _SecondScreenState extends State<SecondScreen> {
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
                 height: _expandedHeight,
-                width: double.infinity, // Prevents overflow
+                width: double.infinity,
                 decoration: const BoxDecoration(
                   color: Colors.grey,
                   borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -232,7 +239,7 @@ class _SecondScreenState extends State<SecondScreen> {
               ),
             ),
 
-            // Bottom Section (Now Darker)
+            // Bottom Section
             Expanded(
               child: Container(
                 color: const Color(0xFF424242),
@@ -248,7 +255,7 @@ class _SecondScreenState extends State<SecondScreen> {
                       rectangleHeight = rectangleWidth / _paperAspectRatio;
                     }
 
-                    // 🔤 Calculate scaling factor based on A4 height
+                    // Calculate scaling factor based on A4 height
                     const double baseHeight = 842.0; // PDF page height in points
                     const double baseFontSize = 14.0;
                     final double fontScale = rectangleHeight / baseHeight;
@@ -309,14 +316,14 @@ class _SecondScreenState extends State<SecondScreen> {
                                     SizedBox(height: 8 * fontScale),
 
                                   // Answer lines (if enabled)
-
                                   for (int i = 0; i < (entry.value['answerSpaces'] ?? 0); i++)
                                     Container(
                                       margin:  EdgeInsets.symmetric(vertical: 4 * fontScale),
                                       height: scaledLineHeight,
                                       color: (entry.value['hasAnswerLines']) ? Colors.black : Colors.white,
                                     ),
-                                  SizedBox(height: 20 * fontScale), // Space between questions
+                                  // Space between questions
+                                  SizedBox(height: 20 * fontScale), 
                                 ],
                               ],
                             ),
@@ -330,8 +337,7 @@ class _SecondScreenState extends State<SecondScreen> {
               ),
             ),
 
-                    // Add this *outside* your main visible UI
-            // It renders invisible math widgets to prepare for PDF capture
+            // Renders math widgets off screen to prepare for PDF capture
             Transform.translate(
               offset: Offset(0, 5000),
               child: Column(
@@ -439,85 +445,86 @@ class _SecondScreenState extends State<SecondScreen> {
 
 
   void _openAddDialog() {
-  final TextEditingController questionController = TextEditingController();
-  
-  int fillerLines = 1;
-  final TextEditingController fillerLinesController =
-    TextEditingController(text: fillerLines.toString());
-  bool answerLines = true;
-  
-  int answerSpaces = 1;
-  final TextEditingController answerSpacesController =
-    TextEditingController(text: answerSpaces.toString());
+    final TextEditingController questionController = TextEditingController();
+    
+    int fillerLines = 1;
+    final TextEditingController fillerLinesController =
+      TextEditingController(text: fillerLines.toString());
+    bool answerLines = true;
+    
+    int answerSpaces = 1;
+    final TextEditingController answerSpacesController =
+      TextEditingController(text: answerSpaces.toString());
 
-  showDialog(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add Question'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: questionController,
-                decoration: const InputDecoration(labelText: 'Question Text'),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Add Question'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: questionController,
+                  decoration: const InputDecoration(labelText: 'Question Text'),
+                ),
+                TextField(
+                  controller: fillerLinesController,
+                  decoration: const InputDecoration(labelText: 'Filler Lines'),
+                  keyboardType: TextInputType.number,
+                ),
+                TextField(
+                  controller: answerSpacesController,
+                  decoration: const InputDecoration(labelText: 'Answer Spaces'),
+                  keyboardType: TextInputType.number,
+                ),
+                Row(
+                  children: [
+                    const Text('Answer Lines'),
+                    const Spacer(),
+                    Switch(
+                      value: answerLines,
+                      onChanged: (val) {
+                        setState(() => answerLines = val);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              TextField(
-                controller: fillerLinesController,
-                decoration: const InputDecoration(labelText: 'Filler Lines'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: answerSpacesController,
-                decoration: const InputDecoration(labelText: 'Answer Spaces'),
-                keyboardType: TextInputType.number,
-              ),
-              Row(
-                children: [
-                  const Text('Answer Lines'),
-                  const Spacer(),
-                  Switch(
-                    value: answerLines,
-                    onChanged: (val) {
-                      setState(() => answerLines = val);
-                    },
-                  ),
-                ],
+              ElevatedButton(
+                onPressed: () async {
+                  final text = questionController.text.trim();
+                  if (text.isNotEmpty) {
+                    setState(() {
+                      worksheet['questions'].add({
+                        'questionText': text,
+                        'fillerLines': fillerLines,
+                        'hasAnswerLines': answerLines,
+                        'answerSpaces': answerSpaces,
+                      });
+                    });
+
+                    Navigator.pop(context);
+                    await saveWorksheet(); // Save to file
+                  }
+                },
+                child: const Text('Add'),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final text = questionController.text.trim();
-                if (text.isNotEmpty) {
-                  setState(() {
-                    worksheet['questions'].add({
-                      'questionText': text,
-                      'fillerLines': fillerLines,
-                      'hasAnswerLines': answerLines,
-                      'answerSpaces': answerSpaces,
-                    });
-                  });
+        );
+      },
+    );
+  }
 
-                  Navigator.pop(context);
-                  await saveWorksheet(); // Save to file
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
+  // Needed to separate math equations from question text.
   static List<InlineSpan> parseTextWithMath(String input, {TextStyle? textStyle, TextStyle? mathStyle}) {
     final spans = <InlineSpan>[];
     final regex = RegExp(r'(\$.*?\$)'); // Matches anything between single $...$
@@ -560,7 +567,6 @@ class _SecondScreenState extends State<SecondScreen> {
 
   void exportWorksheetWithMath() {
   if (worksheet['questions'].isEmpty) return;
-
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     final pdf = pw.Document();
     final questions = List<Map<String, dynamic>>.from(worksheet['questions']);
@@ -666,7 +672,7 @@ class _SecondScreenState extends State<SecondScreen> {
   });
 }
 
-  
+  // Captures the rendered math widgets into img form.
   Future<(Uint8List, ui.Image)> captureMathAsImage(GlobalKey key) async {
     final boundary = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary == null) throw Exception("Render object not found for math image capture.");
@@ -678,7 +684,7 @@ class _SecondScreenState extends State<SecondScreen> {
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     final bytes = byteData!.buffer.asUint8List();
 
-    return (bytes, image); // Dart 3.0 tuple syntax
+    return (bytes, image);
   }
 
   Future<bool> _confirmSaveToCloudDialog() async {
@@ -698,7 +704,7 @@ class _SecondScreenState extends State<SecondScreen> {
 
 }
 
-
+// Renders math widgets off screen for pdf capture
 class CompositeMathRenderer extends StatelessWidget {
   final String text;
   final GlobalKey repaintKey;

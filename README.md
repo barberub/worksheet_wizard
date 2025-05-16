@@ -8,9 +8,11 @@ Currently, supports local storage with JSON and cloud storage with Firestore. Cl
 main.dart
  - Initial screen when starting the app.
  - Where most cloud services are initiated.
+
 storage_service.dart
  - Handles storage
    - Cloud and Local
+
 worksheetscreen.dart
  - Worksheet editing screen
    - Cloud saving option when leaving worksheet

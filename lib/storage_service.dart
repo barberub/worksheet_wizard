@@ -49,7 +49,6 @@ class StorageService {
 
     final now = Timestamp.now();
 
-    // This is what gets stored in Firestore
     final worksheetToSave = {
       ...worksheet,
       'wID': docRef.id,
@@ -59,7 +58,7 @@ class StorageService {
 
     await docRef.set(worksheetToSave, SetOptions(merge: true));
 
-    // 🔁 Update original worksheet (local copy) too
+    // Update local worksheet
     worksheet['wID'] = docRef.id;
     worksheet['lastSaved'] = now;
     worksheet['creator'] = uid;

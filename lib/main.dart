@@ -32,60 +32,6 @@ class HomeScreen extends StatefulWidget  {
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 
-  /*@override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Worksheet Wizard'),
-      ),
-      body: Container(
-        color: Colors.grey[800],
-        alignment: Alignment.center,
-        child: const Text(
-          'Center Content',
-          style: TextStyle(color: Colors.white, fontSize: 20),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final TextEditingController nameController = TextEditingController();
-
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('New Worksheet'),
-              content: TextField(
-                controller: nameController,
-                decoration: const InputDecoration(hintText: 'Enter worksheet name'),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context), // Cancel
-                    child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final String name = nameController.text.trim();
-                    if (name.isNotEmpty) {
-                      Navigator.pop(context); // Close dialog
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SecondScreen(worksheetName: name),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
-      ),
-    );
-  }*/
 }
 
 class _HomeScreenState extends State<HomeScreen> {
