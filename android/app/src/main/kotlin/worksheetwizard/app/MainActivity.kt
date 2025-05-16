@@ -1,4 +1,4 @@
-package com.example.worksheet_wizard
+package com.worksheetwizard.app
 
 import io.flutter.embedding.android.FlutterActivity
 

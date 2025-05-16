@@ -100,30 +100,29 @@ class _SecondScreenState extends State<SecondScreen> {
     return PopScope(
     canPop: false, // this is like "default behavior"
     onPopInvokedWithResult: (didPop, result)  async {
-      if (didPop ) return; // user already popped (e.g., from gesture), skip
+      if (didPop) return; // user already popped (e.g., from gesture), skip
       
       
         // Check for unsaved changes
         final lastSaved = worksheet['lastSaved'];
         final lastModified = worksheet['lastModified'];
         final hasUnsavedChanges = lastSaved == null || lastSaved != lastModified;
-
+        final uid = FirebaseAuth.instance.currentUser?.uid;
         if (!hasUnsavedChanges) {
           Navigator.pop(context);
           return;
         }
-
+      if (uid != null) {
       final shouldSave = await _confirmSaveToCloudDialog();
 
       if (shouldSave) {
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid != null) {
+
           await storage.cloudSave(worksheet, uid);
           await saveWorksheet();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Saved to cloud ✅')),
           );
-        }
+      }
       }
 
       Navigator.pop(context); // manually pop after logic

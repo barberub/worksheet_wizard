@@ -121,37 +121,58 @@ class StorageService {
 
 
   void deleteAccount(BuildContext context) async {
-
-
-    final collection = FirebaseFirestore.instance.collection('worksheets');
-
-    final snapshot = await collection.where('creator', isEqualTo: FirebaseAuth.instance.currentUser?.uid).get();
-
-    final batch = FirebaseFirestore.instance.batch();
-
-    for (final doc in snapshot.docs) {
-      batch.delete(doc.reference);
-    }
     
-    for (final doc in snapshot.docs) {
-      batch.delete(doc.reference);
-    }
-    await batch.commit();
+    bool confirmed = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext dialogContext) {
+      return AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: const Text('Are you sure you want to delete your account? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      );
+    },
+  ) ?? false;
 
-    try {
-      await FirebaseAuth.instance.currentUser?.delete();
+    if (confirmed) {
 
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        // 🔁 Show reauth dialog
-        _showReauthDialog(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting account: ${e.message}')),
-        );
+      final collection = FirebaseFirestore.instance.collection('worksheets');
+
+      final snapshot = await collection.where('creator', isEqualTo: FirebaseAuth.instance.currentUser?.uid).get();
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      try {
+        await FirebaseAuth.instance.currentUser?.delete();
+
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          // 🔁 Show reauth dialog
+          _showReauthDialog(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting account: ${e.message}')),
+          );
+        }
       }
     }
-
   }
 
   void _showReauthDialog(BuildContext context) {
